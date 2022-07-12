@@ -1,2 +1,6 @@
 # virtual env
 .venv
+
+# misc
+utils/__pycache__
+tempCodeRunnerFile.py
