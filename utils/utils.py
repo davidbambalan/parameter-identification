@@ -24,7 +24,6 @@ def biggestContour(contours):
 
     return biggest, maxArea
 
-
 def drawRectangle(pts, img, color=(0, 255, 0), thickness = 1):
     # draw rectangle
     return cv2.polylines(img, [pts], True, color, thickness)
@@ -44,3 +43,50 @@ def reorder(pts):
     ptBottomLeft    = [[x,y] for [x,y] in pts if ([x,y] not in ptsTop and [x,y] in ptsLeft)]
 
     return np.array([ptTopLeft, ptTopRight, ptBottomRight, ptBottomLeft]).reshape((4, 2))
+
+def generateCurve(img):
+    # constants
+    MIN_AREA = 5000
+    EPSILON_COEFF = 0.001
+    IMG_HEIGHT, IMG_WIDTH = img.shape
+
+    # declare variables
+    biggest = np.array([])
+    maxArea = 0
+
+    curveContours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for contour in curveContours:
+        contourArea = cv2.contourArea(contour)
+        if (contourArea > MIN_AREA):
+            contourPerimeter = cv2.arcLength(contour, False)
+            contourShape = cv2.approxPolyDP(contour, EPSILON_COEFF * contourPerimeter, False)
+            if (contourArea > maxArea) and (len(contourShape) > 4):
+                biggest = contourShape
+                maxArea = contourArea
+
+    # eliminate outliers
+    length, _, _ = biggest.shape
+    biggest = biggest.reshape((length, 2))
+    biggest = np.array([[x, y] for [x, y] in biggest if (x > 0.01*IMG_WIDTH and x < 0.99*IMG_WIDTH) and (y > 0.01*IMG_HEIGHT and y < 0.99*IMG_HEIGHT)])
+
+    return biggest.reshape((len(biggest), 1, 2))
+
+def interpolate(img, pts, xMin=-np.pi, xMax=np.pi, yMin=0, yMax=1):
+    # constant
+    IMG_HEIGHT, IMG_WIDTH = img.shape
+
+    # declare variales
+    newPts = []
+
+    length, _, _ = pts.shape
+    pts = pts.reshape((length, 2))
+
+    for pt in pts:
+        _x = pt[0]
+        _y = pt[1]
+        x = xMin + ((_x/IMG_WIDTH) * (xMax - xMin))
+        y = yMax - ((_y/IMG_HEIGHT) * (yMax - yMin))
+        newPts.append([x, y])
+
+    return np.array(newPts)
