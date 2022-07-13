@@ -1,15 +1,24 @@
 ## import dependencies
-from lib2to3.pgen2.pgen import generate_grammar
-from pkgutil import extend_path
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import scipy.optimize as skopt
+import tkinter as tk
 
 ## import utilities
 import utils.utils as utils
 import utils.preprocess as preprocess
 import utils.model as model
+
+# WINDOW
+# init window
+root = tk.Tk()
+root.title('Parameter Identification')
+# TODO: icon
+
+
+# run window
+root.mainloop()
 
 # IMAGE PREPROCESSING
 ## Read Image
@@ -87,9 +96,6 @@ ax.set_ylim(Y_MIN, Y_MAX)
 ax.set_ylabel("Intensity")
 ax.set_xticks([X_MIN, 0.0, X_MAX])
 ax.set_xticklabels([r"$-\pi$", 0, r"$\pi$"])
-
-# fig.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
-
 ax.grid(linestyle='--')
 SAMPLES = 1000
 phi = np.linspace(X_MIN, X_MAX, SAMPLES)
