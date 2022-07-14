@@ -2,7 +2,7 @@
 
 Parameter Identification is a Python app which automatically converts drawn graph to a plot and outputs the parameters of the intensity function.
 
-<img src="./assets/app-in-action.jpg" alt="The app in action" width="500">
+![The app in action](./assets/app-in-action.jpg)
 
 ## Dependencies
 
