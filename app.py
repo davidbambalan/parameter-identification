@@ -1,107 +1,244 @@
-## import dependencies
+# import dependencies
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
-import scipy.optimize as skopt
 import tkinter as tk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg)
 
-## import utilities
+# import utilities
 import utils.utils as utils
 import utils.preprocess as preprocess
 import utils.model as model
 
-# WINDOW
-# init window
-root = tk.Tk()
-root.title('Parameter Identification')
-# TODO: icon
-
-
-# run window
-root.mainloop()
-
-# IMAGE PREPROCESSING
-## Read Image
-### read image
-imgPath = './assets/image.jpg'
-_img = cv2.imread(imgPath)
-img = _img
-
-# ### resize image
-imgHeight = 1080
-imgWidth = int(imgHeight * 4 / 3)
-img = cv2.resize(_img, (imgWidth, imgHeight))
-
-## Turn to Grayscale
-imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-## Detect Edges
-### blur the imgage for better edge detection
-imgBlur = cv2.GaussianBlur(imgGray, (5, 5), 1)
-
-### main edge detection
-threshold1 = 20
-threshold2 = 20
-imgEdge = cv2.Canny(imgBlur, threshold1, threshold2)
-
-### remove noise
-kernel = np.ones((3, 3)) # square kernel
-imgDilate = cv2.dilate(imgEdge, kernel, iterations=2)
-imgErode = cv2.erode(imgDilate, kernel, iterations=1)
-
-
-## Find Contours
-contours, _ = cv2.findContours(imgErode, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-## Get the Biggest Contour
-biggest, _ = utils.biggestContour(contours)
-# rectangle = utils.drawRectangle(biggest, img, thickness=2)
-
-## Warp the Image
-cornerCoords = utils.reorder(np.float32(biggest))
-targetCoords = np.float32([
-    [0, 0],
-    [imgWidth, 0],
-    [imgWidth, imgHeight],
-    [0, imgHeight]
-])
-tform = cv2.getPerspectiveTransform(cornerCoords, targetCoords)
-imgWarped = cv2.warpPerspective(img, tform, (imgWidth, imgHeight))
-imgWarpedThreshold = cv2.warpPerspective(imgErode, tform, (imgWidth, imgHeight))
-
-## Resize Image
-finalHeight = 720
-finalWidth = int(finalHeight * 4 / 3)
-imgFinal = cv2.resize(imgWarped[0:imgHeight, 0:imgWidth], (finalWidth, finalHeight))
-imgFinalThreshold = cv2.resize(imgWarpedThreshold[0:imgHeight, 0:imgWidth], (finalWidth, finalHeight))
-
-# Generate Points
-curve = utils.generateCurve(imgFinalThreshold)
-# interpolate
+# constants
 X_MIN = -np.pi
 X_MAX = np.pi
 Y_MIN = 0
 Y_MAX = 1
-pts = utils.interpolate(imgFinalThreshold, curve, X_MIN, X_MAX, Y_MIN, Y_MAX)
 
-# Get Parameters
-popt, _ = skopt.curve_fit(model.intensityExplicit, pts[:, 0], pts[:, 1], bounds=(0, 1))
+def uploadFile():
+    filename = utils.uploadFile()
+    imgFilename.set(filename)
+    
+    global _img
+    _img = cv2.imread(filename)
+    img = preprocess.convertToTk(_img)
+    lblImageOrig.configure(image=img)
+    lblImageOrig.image = img
+
+def detectCorners(img):
+    global cornerCoords
+    global imgErode
+    imgCorners, cornerCoords, imgErode = preprocess.detectCorners(img)
+    imgCorners = preprocess.convertToTk(imgCorners)
+    lblImageOrig.configure(image=imgCorners)
+    lblImageOrig.image = imgCorners
+
+def convertImgToGraph(img, cornerCoords):
+    global imgWarped
+    imgWarped = preprocess.warpImage(img, cornerCoords)
+    ax.clear()
+    configurePlot()
+    ax.imshow(imgWarped, extent=[X_MIN, X_MAX, Y_MIN, Y_MAX], aspect='auto')
+    canvas.draw()
+
+def configurePlot():
+    ax.set_xlim(X_MIN, X_MAX)
+    ax.set_ylim(Y_MIN, Y_MAX)
+    ax.set_ylim(Y_MIN, Y_MAX)
+    ax.set_ylabel("Intensity")
+    ax.set_xticks([X_MIN, 0.0, X_MAX])
+    ax.set_xticklabels([r"$-\pi$", 0, r"$\pi$"])
+    ax.grid(linestyle='--')
+
+def detectPoints(imgErode, cornerCoords):
+    global pts
+    pts = preprocess.generatePoints(imgErode, cornerCoords)
+    ax.clear()
+    configurePlot()
+    ax.imshow(imgWarped, extent=[X_MIN, X_MAX, Y_MIN, Y_MAX], aspect='auto')
+    ax.scatter(pts[:, 0], pts[:, 1], label='data')
+    ax.legend()
+    canvas.draw()
+
+def fitCurve(pts):
+    popt = preprocess.fitCurve(pts)
+    SAMPLES = 100
+    phi = np.linspace(X_MIN, X_MAX, SAMPLES)
+    ax.clear()
+    configurePlot()
+    ax.imshow(imgWarped, extent=[X_MIN, X_MAX, Y_MIN, Y_MAX], aspect='auto')
+    ax.plot(phi, model.intensityExplicit(phi, *popt), color="red", label="model")
+    ax.scatter(pts[:, 0], pts[:, 1], label='data')
+    ax.legend()
+    canvas.draw()
+
+    lblTT['text'] = f' > tau_t: \t\t {popt[0]}'
+    lblTM['text'] = f' > tau_m: \t {popt[1]}'
+    lblTB['text'] = f' > tau_b: \t {popt[2]}'
+    lblAT['text'] = f' > alpha_t: \t {popt[3]}'
+    lblAB['text'] = f' > alpha_b: \t {popt[4]}'
+
+# WINDOW
+# init window
+root = tk.Tk()
+root.resizable(False, False)
+root.geometry('960x720')
+root.title('Parameter Identification')
+# TODO: icon
+root.grid_columnconfigure(0, weight=1)
+root.grid_columnconfigure(1, weight=1)
+root.grid_rowconfigure(1, weight=1)
+
+# IMPORT FRAME
+frImport = tk.LabelFrame(
+    master = root,
+    text = " Step 1: Upload image ",
+    padx = 24,
+    pady = 24
+)
+frImport.grid(column=0, row=0, columnspan=2, padx=24, pady=24, sticky=tk.EW)
+frImport.grid_columnconfigure(1, weight=1)
+    
+btnImport = tk.Button(
+    master = frImport,
+    text = 'Upload',
+    padx = 24,
+    pady = 0,
+    command = uploadFile
+)
+btnImport.grid(column=0, row=0, padx=(0, 12))
+
+imgFilename = tk.StringVar()
+txtImport = tk.Entry(
+    master = frImport,
+    state = 'disabled',
+    textvariable = imgFilename
+)
+txtImport.grid(column=1, row=0, sticky=tk.EW)
+
+# LEFT FRAME
+frLeft = tk.LabelFrame(
+    master = root,
+    text = " Step 2: Detect Graph ",
+    padx = 24,
+    pady = 24
+)
+frLeft.grid(column=0, row=1, padx=(24, 12), pady=(0, 24), sticky=tk.NSEW)
+frLeft.grid_columnconfigure(0, weight=1)
+
+frImageOrig = tk.Frame(
+    master = frLeft,
+    bg = '#CCCCCC',
+    width = 396, 
+    height = 297
+)
+frImageOrig.grid(column=0, row=0, columnspan=2, sticky=tk.W)
+frImageOrig.grid_propagate(False)
+
+lblImageOrig = tk.Label(
+    master = frImageOrig,
+    bg = '#CCCCCC'
+)
+lblImageOrig.place(x=-2, y=-2)
+
+btnDetect = tk.Button(
+    master = frLeft,
+    text = 'Auto-detect corners',
+    padx = 24,
+    pady = 0,
+    command = lambda: detectCorners(_img)
+)
+btnDetect.grid(column=0, row=1, pady=(12, 0), sticky=tk.E)
+
+btnToGraph = tk.Button(
+    master = frLeft,
+    text = 'Convert to graph',
+    padx = 24,
+    pady = 0,
+    command = lambda: convertImgToGraph(_img, cornerCoords)
+)
+btnToGraph.grid(column=1, row=1, pady=(12, 0), padx=(12, 0), sticky=tk.E)
+
+# RIGHT FRAME
+frRight = tk.LabelFrame(
+    master = root,
+    text = " Step 3: Fit Curve ",
+    padx = 24,
+    pady = 24
+)
+frRight.grid(column=1, row=1, padx=(12, 24), pady=(0, 24), sticky=tk.NSEW)
+frRight.grid_columnconfigure(0, weight=1)
+
+frGraph = tk.Frame(
+    master = frRight,
+    bg = '#CCCCCC',
+    width = 396,
+    height = 297
+)
+frGraph.grid(column=0, row=0, columnspan=2, sticky=tk.W)
+
+fig = plt.Figure(figsize=(4, 3), dpi=100, constrained_layout=True)
+ax = fig.add_subplot(111)
+configurePlot()
+canvas = FigureCanvasTkAgg(fig, master = frGraph)
+canvas.draw()
+canvas.get_tk_widget().pack()
+
+btnDetectPoints = tk.Button(
+    master = frRight,
+    text = 'Detect points',
+    padx = 24,
+    pady = 0,
+    command = lambda: detectPoints(imgErode, cornerCoords)
+)
+btnDetectPoints.grid(column=0, row=1, pady=(12, 0), sticky=tk.E)
+
+btnCurveFit = tk.Button(
+    master = frRight,
+    text = 'Fit curve',
+    padx = 24,
+    pady = 0,
+    command = lambda: fitCurve(pts)
+)
+btnCurveFit.grid(column=1, row=1, pady=(12, 0), padx=(12, 0), sticky=tk.E)
+
+lblParams = tk.Label(
+    master = frRight,
+    text = 'Model parameters:'
+)
+lblParams.grid(column=0, row=2, sticky=tk.W)
+
+lblTT = tk.Label(
+    master = frRight,
+    text = f' > tau_t: \t\t 0'
+)
+lblTT.grid(column=0, row=3, sticky=tk.W)
+
+lblTM = tk.Label(
+    master = frRight,
+    text = f' > tau_m: \t 0'
+)
+lblTM.grid(column=0, row=4, sticky=tk.W)
+
+lblTB = tk.Label(
+    master = frRight,
+    text = f' > tau_b: \t 0'
+)
+lblTB.grid(column=0, row=5, sticky=tk.W)
+
+lblAT = tk.Label(
+    master = frRight,
+    text = f' > alpha_t: \t 0'
+)
+lblAT.grid(column=0, row=6, sticky=tk.W)
+
+lblAB = tk.Label(
+    master = frRight,
+    text = f' > alpha_b: \t 0'
+)
+lblAB.grid(column=0, row=7, sticky=tk.W)
 
 
-# Generate Figure
-fig, ax = plt.subplots()
-ax.set_xlim(X_MIN, X_MAX)
-ax.set_ylim(Y_MIN, Y_MAX)
-ax.set_ylim(Y_MIN, Y_MAX)
-ax.set_ylabel("Intensity")
-ax.set_xticks([X_MIN, 0.0, X_MAX])
-ax.set_xticklabels([r"$-\pi$", 0, r"$\pi$"])
-ax.grid(linestyle='--')
-SAMPLES = 1000
-phi = np.linspace(X_MIN, X_MAX, SAMPLES)
-ax.imshow(imgFinal, extent=[X_MIN, X_MAX, Y_MIN, Y_MAX], aspect='auto')
-ax.scatter(pts[:, 0], pts[:, 1], label='data')
-ax.plot(phi, model.intensityExplicit(phi, *popt), color="red", label="model")
-ax.legend()
-print(f"tt: {popt[0]}, tm: {popt[1]}, tb: {popt[2]}, at: {popt[3]}, ab: {popt[4]}")
-plt.show()
+# run window
+root.mainloop()
