@@ -6,7 +6,7 @@ Parameter Identification is a Python app which automatically converts drawn grap
 
 ## Dependencies
 
-Python 3.10.
+Python 3.10 ([download here](https://www.python.org/downloads/)).
 
 ## Installation
 
