@@ -27,4 +27,4 @@ python app.py
 2. Press `Auto-detect corners` to detect the corners. A green highlight will show.
 3. Press `Convert to graph` to transfer the image to the graph.
 4. Press `Detect points` to detect the points in the graph. Blue scatter points will show.
-5. Press `Fit curve` to create the curve. The parameters will show in the `Model parameters` and a red plot will shown.
+5. Press `Fit curve` to create the curve. The parameters will show in the `Model parameters` and a red plot will be shown.
